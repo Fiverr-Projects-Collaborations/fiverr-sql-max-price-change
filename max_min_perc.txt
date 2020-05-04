@@ -1,0 +1,61 @@
+with y as (
+    SELECT
+        ROW_NUMBER() OVER(Partition by commodity ORDER BY commodity, date_d desc) as rn,
+        t.commodity AS commodity,
+        t.date_d,
+        t.price
+    FROM t1 t
+    where t.date_d between Dateadd(Year,-15,GetDate()-1) and Getdate()
+),
+z as (
+    select
+        y.* ,
+        y1.price as price1,
+        y1.date_d as date1
+    from y
+    join t2
+        on y.commodity = t2.commodity
+    join y y1
+        on y1.commodity = y.commodity
+        and y.rn = y1.rn - t2.period
+),
+a as (
+    select
+        y.commodity,
+        y.date_d,
+        y.price,
+        (y.price-z.price1)*100/z.price1 as perc_change
+    from y
+    left outer join z
+        on y.rn = z.rn
+        and y.commodity = z.commodity
+)
+,b as (
+select a.* from a join(
+    select
+        max(perc_change) as maxp,
+        commodity
+    from a
+    group by commodity) p
+   on a.commodity = p.commodity
+    and a.perc_change = p.maxp
+)
+,c as (
+select a.* from a join(
+    select
+        min(perc_change) as minp,
+        commodity
+    from a
+    group by commodity) p
+   on a.commodity = p.commodity
+    and a.perc_change = p.minp
+)
+select
+    b.commodity,
+    b.date_d as max_c_date,
+    b.perc_change max_pchange,
+    c.date_d as min_c_date,
+    c.perc_change min_pchange
+from b
+join c
+    on b.commodity = c.commodity
